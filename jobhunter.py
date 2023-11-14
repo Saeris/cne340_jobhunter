@@ -1,107 +1,125 @@
+# Drake Costa
+# CNE340 Fall 2023
+#
+# Job Hunter project. Scrapes remotive for job listings and adds them to a MySQL database.
+# Adapted from https://github.com/ellisju37073/cne340_jobhunter/blob/master/jobhunter.py
+#
+# Using docker compose configuration from
+# https://stackoverflow.com/questions/75967671/python-mysql-connector-python-how-to-connect-to-docker-container-from-terminal
+
 import mysql.connector
 import time
 import json
 import requests
-from datetime import date
+from datetime import date, datetime, timedelta
+import dateutil.parser
 import html2text
 
 
-# Connect to database
-# You may need to edit the connect function based on your local settings.#I made a password for my database because it is important to do so. Also make sure MySQL server is running or it will not connect
-def connect_to_sql():
-    conn = mysql.connector.connect(user='root', password='',
-                                   host='127.0.0.1', database='cne340')
+def connect_to_db():
+    conn = mysql.connector.connect(
+        user='user',
+        password='secret',
+        database='cne340', 
+        host='127.0.0.1',
+        port=3306
+    )
     return conn
 
 
-# Create the table structure
 def create_tables(cursor):
-    # Creates table
-    # Must set Title to CHARSET utf8 unicode Source: http://mysql.rjweb.org/doc.php/charcoll.
-    # Python is in latin-1 and error (Incorrect string value: '\xE2\x80\xAFAbi...') will occur if Description is not in unicode format due to the json data
-    cursor.execute('''CREATE TABLE IF NOT EXISTS jobs (id INT PRIMARY KEY auto_increment, Job_id varchar(50) , 
-    company varchar (300), Created_at DATE, url varchar(30000), Title LONGBLOB, Description LONGBLOB ); ''')
-
-
-# Query the database.
-# You should not need to edit anything in this function
-def query_sql(cursor, query):
+    query = """
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INT PRIMARY KEY auto_increment,
+            job_id varchar(50),
+            company varchar (300),
+            created_at DATE,
+            url TEXT,
+            title LONGBLOB,
+            description LONGBLOB
+        );
+    """
     cursor.execute(query)
-    return cursor
 
 
-# Add a new job
 def add_new_job(cursor, jobdetails):
-    # extract all required columns
+    job_id = jobdetails['id']
+    company = jobdetails['company_name']
+    created_at = jobdetails['publication_date'][0:10]
+    url = jobdetails['url']
+    title = jobdetails['title']
     description = html2text.html2text(jobdetails['description'])
-    date = jobdetails['publication_date'][0:10]
-    query = cursor.execute("INSERT INTO jobs( Description, Created_at " ") "
-               "VALUES(%s,%s)", (  description, date))
-     # %s is what is needed for Mysqlconnector as SQLite3 uses ? the Mysqlconnector uses %s
-    return query_sql(cursor, query)
+    query = """
+        INSERT INTO jobs(job_id, company, created_at, url, title, description)
+        VALUES(%s,%s,%s,%s,%s,%s);
+    """
+    return cursor.execute(query, (job_id, company, created_at, url, title, description))
 
 
-# Check if new job
 def check_if_job_exists(cursor, jobdetails):
-    ##Add your code here
-    query = "UPDATE"
-    return query_sql(cursor, query)
-
-# Deletes job
-def delete_job(cursor, jobdetails):
-    ##Add your code here
-    query = "UPDATE"
-    return query_sql(cursor, query)
+    query = """
+        SELECT id FROM jobs WHERE job_id = %s;
+    """
+    job_id = jobdetails["id"]
+    return cursor.execute(query, (job_id,))
 
 
-# Grab new jobs from a website, Parses JSON code and inserts the data into a list of dictionaries do not need to edit
-def fetch_new_jobs():
-    query = requests.get("https://remotive.io/api/remote-jobs")
-    datas = json.loads(query.text)
+def delete_old_jobs(cursor):
+    query = """
+        DELETE FROM jobs WHERE created_at < curdate() - interval 14 day;
+    """
+    return cursor.execute(query)
 
-    return datas
+# TypeScript type of response shape
+# type Job {
+#   candidate_required_location: string;
+#   category: stirng;
+#   company_logo: string;
+#   company_name: string;
+#   description: string;
+#   id: number;
+#   job_type: string;
+#   publication_date: string;
+#   salary: string;
+#   tags: string[];
+#   title: string:
+#   url: string;
+# }
 
-
-# Main area of the code. Should not need to edit
 def jobhunt(cursor):
+    # First prune the database of old jobs
+    delete_old_jobs(cursor)
     # Fetch jobs from website
-    jobpage = fetch_new_jobs()  # Gets API website and holds the json data in it as a list
-    # use below print statement to view list in json format
-    # print(jobpage)
-    add_or_delete_job(jobpage, cursor)
+    jobpage = json.loads(requests.get("https://remotive.com/api/remote-jobs").text)
+    for jobdetails in jobpage['jobs']:
+        # First check if the job listing is older than 14 days, skip if true
+        created_at = dateutil.parser.parse(jobdetails['publication_date'])
+        age = datetime.now() - created_at
+        if age.days > 14:
+            continue
 
-
-def add_or_delete_job(jobpage, cursor):
-    # Add your code here to parse the job page
-    for jobdetails in jobpage['jobs']:  # EXTRACTS EACH JOB FROM THE JOB LIST. It errored out until I specified jobs. This is because it needs to look at the jobs dictionary from the API. https://careerkarma.com/blog/python-typeerror-int-object-is-not-iterable/
-        # Add in your code here to check if the job already exists in the DB
+        # If the listing is more recent, add it if we don't already have it in the database
+        # https://stackoverflow.com/questions/2511679/python-number-of-rows-affected-by-cursor-executeselect
         check_if_job_exists(cursor, jobdetails)
-        is_job_found = len(
-        cursor.fetchall()) > 0  # https://stackoverflow.com/questions/2511679/python-number-of-rows-affected-by-cursor-executeselect
-        if is_job_found:
-
-        else:
-            # INSERT JOB
-            # Add in your code here to notify the user of a new posting. This code will notify the new user
+        job_not_found = len(cursor.fetchall()) == 0
+        if job_not_found:
+            print("Adding new job to database!")
+            add_new_job(cursor, jobdetails)
+    print("Finished updating jobs")
 
 
-
-# Setup portion of the program. Take arguments and set up the script
-# You should not need to edit anything here.
 def main():
-    # Important, rest are supporting functions
-    # Connect to SQL and get cursor
-    conn = connect_to_sql()
+    conn = connect_to_db()
     cursor = conn.cursor()
     create_tables(cursor)
 
-    while (1):  # Infinite Loops. Only way to kill it is to crash or manually crash it. We did this as a background process/passive scraper
+    while (1):
         jobhunt(cursor)
-        time.sleep(21600)  # Sleep for 1h, this is ran every hour because API or web interfaces have request limits. Your reqest will get blocked.
+        # Sleep for 1h
+        time.sleep(21600)
 
 
 # Sleep does a rough cycle count, system is not entirely accurate
 # If you want to test if script works change time.sleep() to 10 seconds and delete your table in MySQL
 if __name__ == '__main__':
     main()
-
