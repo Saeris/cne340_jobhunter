@@ -7,6 +7,7 @@
 # Using docker compose configuration from
 # https://stackoverflow.com/questions/75967671/python-mysql-connector-python-how-to-connect-to-docker-container-from-terminal
 
+import os
 import mysql.connector
 import time
 import json
@@ -18,11 +19,11 @@ import html2text
 
 def connect_to_db():
     conn = mysql.connector.connect(
-        user='user',
-        password='secret',
-        database='cne340', 
-        host='127.0.0.1',
-        port=3306
+        user=os.environ['MYSQL_USER'],
+        password=os.environ['MYSQL_PASSWORD'],
+        database=os.environ['MYSQL_DATABASE'],
+        host=os.environ['MYSQL_HOST'],
+        port=int(os.environ['MYSQL_PORT'])
     )
     return conn
 
@@ -85,6 +86,7 @@ def delete_old_jobs(cursor):
 #   title: string:
 #   url: string;
 # }
+
 
 def jobhunt(cursor):
     # First prune the database of old jobs

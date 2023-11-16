@@ -1,6 +1,11 @@
 {
   // These tasks will run in order when initializing your CodeSandbox project.
-  "setupTasks": ["pip install -r requirements.txt"],
+  "setupTasks": [
+    {
+      "name": "pip install -r requirements.txt",
+      "command": "pip install -r requirements.txt"
+    }
+  ],
 
   // These tasks can be run from CodeSandbox. Running one will open a log in the app.
   "tasks": {
@@ -9,14 +14,22 @@
       "command": "python jobhunter.py",
       "runAtStart": true,
       "restartOn": {
-        "files": ["jobhunter.py"]
+        "files": [
+          "jobhunter.py"
+        ],
+        "branch": false,
+        "resume": false
       }
     },
     "install-dependencies": {
       "name": "Installing Dependencies",
       "command": "pip install -r requirements.txt",
       "restartOn": {
-        "files": ["requirements.txt"]
+        "files": [
+          "requirements.txt"
+        ],
+        "branch": false,
+        "resume": false
       }
     }
   }
