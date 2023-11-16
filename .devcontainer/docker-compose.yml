@@ -8,38 +8,23 @@ services:
     env_file:
       - .env
     volumes:
-      - ../..:/workspaces:cached    
-    # Runs app on the same network as the database container, allows "forwardPorts" in devcontainer.json function.
+      - ../..:/workspaces:cached
     network_mode: service:db
-    # Overrides default command so things don't shut down after the process ends.
     command: sleep infinity
 
   db:
     image: mysql:latest
     restart: always
     volumes:
-      - volume-db:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
     env_file:
       - .env
-    networks:
-      - csb
 
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
+  adminer:
+    image: adminer:latest
     restart: always
-    links:
-      - db
     ports:
-      - '8080:80'
-    environment:
-      PMA_HOST: db
-      PMA_ARBITRARY: 1
-    networks:
-      - csb
-
-networks:
-  csb:
-    driver: bridge
+      - 8080:8080
 
 volumes:
-    volume-db:
+  mysql-data:

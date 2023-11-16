@@ -57,17 +57,20 @@ def add_new_job(cursor, jobdetails):
     return cursor.execute(query, (job_id, company, created_at, url, title, description))
 
 
-def check_if_job_exists(cursor, jobdetails):
+def check_if_job_exists(cursor, jobdetails) -> bool:
     query = """
-        SELECT id FROM jobs WHERE job_id = %s;
+        SELECT COUNT(1) FROM jobs WHERE job_id = %s;
     """
     job_id = jobdetails["id"]
-    return cursor.execute(query, (job_id,))
+    cursor.execute(query, (job_id,))
+    if cursor.fetchone()[0]:
+        print(f"Job {job_id} already exists")
+        return True
 
 
 def delete_old_jobs(cursor):
     query = """
-        DELETE FROM jobs WHERE created_at < curdate() - interval 14 day;
+        DELETE FROM jobs WHERE created_at > curdate() - interval 14 day;
     """
     return cursor.execute(query)
 
@@ -93,6 +96,7 @@ def jobhunt(cursor):
     delete_old_jobs(cursor)
     # Fetch jobs from website
     jobpage = json.loads(requests.get("https://remotive.com/api/remote-jobs").text)
+    total = 0
     for jobdetails in jobpage['jobs']:
         # First check if the job listing is older than 14 days, skip if true
         created_at = dateutil.parser.parse(jobdetails['publication_date'])
@@ -101,22 +105,31 @@ def jobhunt(cursor):
             continue
 
         # If the listing is more recent, add it if we don't already have it in the database
-        # https://stackoverflow.com/questions/2511679/python-number-of-rows-affected-by-cursor-executeselect
-        check_if_job_exists(cursor, jobdetails)
-        job_not_found = len(cursor.fetchall()) == 0
-        if job_not_found:
+        if not check_if_job_exists(cursor, jobdetails):
             print("Adding new job to database!")
             add_new_job(cursor, jobdetails)
-    print("Finished updating jobs")
+            total += 1
+    print(f"Finished updating, added {total} jobs")
+
+def log_row_count(cursor):
+    cursor.execute("SELECT COUNT(*) FROM jobs")
+    count = cursor.fetchone()[0]
+    print(f"{count} total jobs")
 
 
 def main():
     conn = connect_to_db()
     cursor = conn.cursor()
     create_tables(cursor)
+    log_row_count(cursor)
 
     while (1):
         jobhunt(cursor)
+        conn.commit()
+        log_row_count(cursor)
+        cursor.execute("SELECT title, created_at from jobs LIMIT 100;")
+        rows = cursor.fetchall()
+        print(*rows,sep='\n')
         # Sleep for 1h
         time.sleep(21600)
 
