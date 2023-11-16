@@ -127,9 +127,6 @@ def main():
         jobhunt(cursor)
         conn.commit()
         log_row_count(cursor)
-        cursor.execute("SELECT title, created_at from jobs LIMIT 100;")
-        rows = cursor.fetchall()
-        print(*rows,sep='\n')
         # Sleep for 1h
         time.sleep(21600)
 
